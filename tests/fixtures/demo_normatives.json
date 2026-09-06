@@ -1,0 +1,53 @@
+[
+  {
+    "title": "Учебное правило: в документе указан этап строительства",
+    "document_code": "BT-TEST-001",
+    "section": "Реквизиты документа",
+    "requirement_text": "В загруженном учебном документе должен быть указан этап строительства.",
+    "source": "Учебное правило BuildTrack, не является строительным нормативом.",
+    "version": "1.0",
+    "effective_date": null,
+    "status": "active",
+    "stage_name_hint": "Фундамент",
+    "rule_type": "required_phrase",
+    "rule_config": {"phrase": "Этап"},
+    "recommendation": "Добавить явно обозначенное поле с этапом строительства.",
+    "severity": "major",
+    "is_demo": true,
+    "expert_validated": false
+  },
+  {
+    "title": "Учебное правило: в документе указана редакция",
+    "document_code": "BT-TEST-002",
+    "section": "Управление версиями",
+    "requirement_text": "В загруженном учебном документе должна быть указана редакция или версия.",
+    "source": "Учебное правило BuildTrack, не является строительным нормативом.",
+    "version": "1.0",
+    "effective_date": null,
+    "status": "active",
+    "stage_name_hint": "Фундамент",
+    "rule_type": "required_phrase",
+    "rule_config": {"phrase": "Редакция"},
+    "recommendation": "Добавить номер редакции на титульный лист документа.",
+    "severity": "major",
+    "is_demo": true,
+    "expert_validated": false
+  },
+  {
+    "title": "Учебное правило: указан ответственный проверяющий",
+    "document_code": "BT-TEST-003",
+    "section": "Сведения о проверке",
+    "requirement_text": "В загруженном учебном документе должны быть указаны ответственный проверяющий и дата проверки.",
+    "source": "Учебное правило BuildTrack, не является строительным нормативом.",
+    "version": "1.0",
+    "effective_date": null,
+    "status": "active",
+    "stage_name_hint": "Фундамент",
+    "rule_type": "required_phrase",
+    "rule_config": {"phrase": "Ответственный проверяющий"},
+    "recommendation": "Добавить поля с ответственным проверяющим и датой проверки.",
+    "severity": "minor",
+    "is_demo": true,
+    "expert_validated": false
+  }
+]

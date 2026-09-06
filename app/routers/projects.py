@@ -1,16 +1,21 @@
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from datetime import datetime
 import hashlib
 import json
 
 from app import models, schemas
+from app.core.time import utc_now
+from app.core.enums import ProjectRole
 from app.database import get_db
+from app.services import auth_service
 
 router = APIRouter(
     prefix="/projects",
-    tags=["Projects"]
+    tags=["Проекты"],
+    dependencies=[Depends(auth_service.get_current_user)],
 )
 
 
@@ -51,28 +56,53 @@ def generate_sha256_from_dict(data: dict) -> str:
     return hashlib.sha256(json_data.encode("utf-8")).hexdigest()
 
 
-@router.post("/")
-def create_project(project: schemas.ProjectCreate, db: Session = Depends(get_db)):
+@router.post("/", response_model=schemas.ProjectResponse, summary="Создать проект")
+def create_project(
+    project: schemas.ProjectCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(auth_service.get_current_user),
+):
     new_project = models.Project(
         name=project.name,
-        description=project.description
+        description=project.description,
+        location=project.location,
     )
 
     db.add(new_project)
+    db.flush()
+    if not current_user.is_system_admin:
+        db.add(
+            models.ProjectMembership(
+                project_id=new_project.id,
+                user_id=current_user.id,
+                role=ProjectRole.PROJECT_MANAGER.value,
+            )
+        )
     db.commit()
     db.refresh(new_project)
 
     return new_project
 
 
-@router.get("/")
-def get_projects(db: Session = Depends(get_db)):
-    projects = db.query(models.Project).all()
+@router.get("/", response_model=List[schemas.ProjectResponse], summary="Получить проекты")
+def get_projects(
+    db: Session = Depends(get_db),
+    current_user=Depends(auth_service.get_current_user),
+):
+    query = db.query(models.Project)
+    accessible_ids = auth_service.accessible_project_ids(db, current_user)
+    if accessible_ids is not None:
+        query = query.filter(models.Project.id.in_(accessible_ids))
+    projects = query.order_by(models.Project.id).all()
     return projects
 
 
-@router.get("/{project_id}/report")
-def get_project_report(project_id: int, db: Session = Depends(get_db)):
+@router.get("/{project_id}/report", summary="Получить сводку проекта")
+def get_project_report(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(auth_service.get_current_user),
+):
     
 
     project = db.query(models.Project).filter(
@@ -84,6 +114,7 @@ def get_project_report(project_id: int, db: Session = Depends(get_db)):
             status_code=404,
             detail="Объект не найден"
         )
+    auth_service.ensure_project_roles(db, current_user, project_id)
 
     stages = db.query(models.Stage).filter(
         models.Stage.project_id == project_id
@@ -204,7 +235,7 @@ def get_project_report(project_id: int, db: Session = Depends(get_db)):
             "latest_hash": latest_hash,
             "latest_status": latest_status,
             "final_object_status": final_status,
-            "generated_at": datetime.utcnow(),
+            "generated_at": utc_now(),
         },
         "stages": stages_data,
         "audit_trail": audit_logs
@@ -213,8 +244,15 @@ def get_project_report(project_id: int, db: Session = Depends(get_db)):
     return report
 
 
-@router.get("/{project_id}/digital-proof")
-def get_project_digital_proof(project_id: int, db: Session = Depends(get_db)):
+@router.get(
+    "/{project_id}/digital-proof",
+    summary="Получить пакет проверки целостности",
+)
+def get_project_digital_proof(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(auth_service.get_current_user),
+):
     
     project = db.query(models.Project).filter(
         models.Project.id == project_id
@@ -225,6 +263,7 @@ def get_project_digital_proof(project_id: int, db: Session = Depends(get_db)):
             status_code=404,
             detail="Объект не найден"
         )
+    auth_service.ensure_project_roles(db, current_user, project_id)
 
     latest_scan = db.query(models.Scan).filter(
         models.Scan.project_id == project_id
@@ -269,26 +308,36 @@ def get_project_digital_proof(project_id: int, db: Session = Depends(get_db)):
         "verification_status": safe_get(latest_scan, "status"),
         "checked_by": safe_get(latest_scan, "checked_by"),
         "checked_at": safe_get(latest_scan, "checked_at"),
-        "proof_generated_at": datetime.utcnow(),
         "algorithm": "SHA-256",
         "verification_method": "hash_based_integrity_check",
-        "external_registry_ready": True,
-        "external_registry_status": "prepared"
     }
 
     digital_proof_hash = generate_sha256_from_dict(proof_payload)
+    proof_payload.update({
+        "proof_generated_at": utc_now(),
+        "external_registry_ready": False,
+        "external_registry_status": "not_configured",
+    })
 
     return {
-        "message": "Digital proof package generated successfully",
-        "proof_type": "BuildTrack Digital Proof",
+        "message": "Пакет проверки целостности успешно сформирован",
+        "proof_type": "Цифровое доказательство BuildTrack",
         "proof_payload": proof_payload,
         "digital_proof_hash": digital_proof_hash,
         "explanation": "Этот хеш является контрольным цифровым отпечатком результата проверки."
     }
 
 
-@router.get("/{project_id}")
-def get_project(project_id: int, db: Session = Depends(get_db)):
+@router.get(
+    "/{project_id}",
+    response_model=schemas.ProjectResponse,
+    summary="Получить проект",
+)
+def get_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(auth_service.get_current_user),
+):
     project = db.query(models.Project).filter(
         models.Project.id == project_id
     ).first()
@@ -298,12 +347,17 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
             status_code=404,
             detail="Объект не найден"
         )
+    auth_service.ensure_project_roles(db, current_user, project_id)
 
     return project
 
 
-@router.delete("/{project_id}")
-def delete_project(project_id: int, db: Session = Depends(get_db)):
+@router.delete("/{project_id}", summary="Удалить проект")
+def delete_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(auth_service.get_current_user),
+):
     project = db.query(models.Project).filter(
         models.Project.id == project_id
     ).first()
@@ -313,6 +367,12 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
             status_code=404,
             detail="Объект не найден"
         )
+    auth_service.ensure_project_roles(
+        db,
+        current_user,
+        project_id,
+        {ProjectRole.PROJECT_MANAGER},
+    )
 
     db.delete(project)
     db.commit()

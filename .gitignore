@@ -1,26 +1,23 @@
+# Python
 venv/
+.venv/
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
 
+# Tests and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local configuration and IDE files
 .env
 .DS_Store
-
 .idea/
 .vscode/
 
+# Local application data
 uploads/
-*.dbtest_scan.txt
-
-# Local data
-buildtrack.db
+output/
+tmp/
 *.db
 test_scan.txt
-uploads/
-
-# Local data
-buildtrack.db
-*.db
-test_scan.txt
-uploads/
